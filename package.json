@@ -1,0 +1,27 @@
+{
+  "name": "madden27-sportsbook",
+  "version": "1.7.99",
+  "private": true,
+  "description": "Madden 27 Franchise Sportsbook prototype",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "electron .",
+    "setup:electron": "npx --no-install install-electron",
+    "dev": "npm run start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "installer": "node tools/installer/build-installer.cjs",
+    "make:installer": "npm run package && npm run installer"
+  },
+  "dependencies": {
+    "madden-franchise": "4.3.7"
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "@electron-forge/cli": "^8.0.1",
+    "@electron-forge/maker-squirrel": "^8.0.1"
+  },
+  "productName": "Madden 27 Sportsbook",
+  "author": "Madden 27 Sportsbook"
+}
