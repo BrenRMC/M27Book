@@ -161,6 +161,4 @@ Build your sportsbook legacy.
 
 Enjoy your degeneracy!
 
-============================================================
-              M27 BOOK - FRANCHISE SPORTSBOOK
-============================================================
+
