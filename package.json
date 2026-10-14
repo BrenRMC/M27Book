@@ -1,6 +1,6 @@
 {
   "name": "madden27-sportsbook",
-  "version": "1.7.99",
+  "version": "1.8.06",
   "private": true,
   "description": "Madden 27 Franchise Sportsbook prototype",
   "main": "src/main.js",
