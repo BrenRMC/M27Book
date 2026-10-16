@@ -1,8 +1,8 @@
 {
   "name": "madden27-sportsbook",
-  "version": "1.8.06",
+  "version": "1.1.0",
   "private": true,
-  "description": "Madden 27 Franchise Sportsbook prototype",
+  "description": "M27 Book public release candidate with authoritative depth-chart props, Intelligence Lab, odds format toggle, and GitHub release checker",
   "main": "src/main.js",
   "type": "module",
   "scripts": {

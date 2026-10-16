@@ -35,7 +35,6 @@ function renderSlipBar(){const n=(state?.slip||[]).length;if(!n)return '';return
 
 function propPos(position){const p=String(position||'').toUpperCase();if(p==='HB'||p==='FB'||p==='RB')return 'RB';if(p==='WR')return 'WR';if(p==='TE')return 'TE';if(p==='QB')return 'QB';return 'OTHER'}
 function propPosLabel(k){return k==='QB'?'QUARTERBACKS':k==='RB'?'RUNNING BACKS':k==='WR'?'WIDE RECEIVERS':k==='TE'?'TIGHT ENDS':'OTHER'}
-function propDepthScore(p,markets){const pos=propPos(p.position);const pick=(...stats)=>{for(const stat of stats){const m=markets.find(x=>x.stat===stat);if(m)return Number(m.average??m.line??0)||0}return 0};if(pos==='QB')return pick('passYds','completions');if(pos==='RB')return pick('rushAtt','rushYds','receptions','recYds');return pick('recYds','receptions')}
 function renderMobilePropMarket(m){const over=m.overOdds||-110,under=m.underOdds||-110;const base={gameId:m.gameId,gameIndex:m.gameIndex,week:m.week,phaseWeek:m.phaseWeek,away:m.away,home:m.home,line:m.line,playerId:m.playerId,propStat:m.stat};return '<div class="prop-mobile-market"><div class="prop-mobile-market-title">'+esc(m.label||m.stat)+' <span>AVG '+esc(m.average)+'</span></div>'+btnAdd({...base,label:m.name+' O '+m.line+' '+m.label,display:'O '+m.line+' '+over,odds:over,kind:'propOver',meta:'Over • '+m.label})+btnAdd({...base,label:m.name+' U '+m.line+' '+m.label,display:'U '+m.line+' '+under,odds:under,kind:'propUnder',meta:'Under • '+m.label})+'</div>'}
 function renderMobilePropPlayer(p,pos){const markets=p.markets.slice().sort((a,b)=>{const order={passYds:1,passTD:2,completions:3,rushYds:4,rushAtt:5,recYds:6,receptions:7};return (order[a.stat]||99)-(order[b.stat]||99)});return '<article class="prop-player-mobile"><div class="prop-player-mobile-head"><div class="prop-player-identity">'+logo(p.team,true)+'<div><div class="prop-player-mobile-name">'+esc(p.name)+' <span class="prop-role">'+esc(p.role)+'</span></div><div class="prop-player-mobile-info">'+esc(p.team)+' • '+esc(p.roleText)+' • '+esc(markets[0]?.games||0)+' game sample</div></div></div><span class="tag">'+esc(p.side||pos)+'</span></div><div class="prop-mobile-markets">'+markets.map(renderMobilePropMarket).join('')+'</div></article>'}
 function renderProps(){
@@ -53,15 +52,15 @@ function renderProps(){
   if(!group){group={g,players:new Map()};byGame.set(key,group)}
   const pk=String(p.playerId);
   let player=group.players.get(pk);
-  if(!player){player={playerId:p.playerId,name:p.name,position:p.position,team:p.teamName||'',side:p.teamName===g.homeName?'HOME':p.teamName===g.awayName?'AWAY':'',markets:[]};group.players.set(pk,player)}
+  if(!player){player={playerId:p.playerId,name:p.name,position:p.position,team:p.teamName||'',side:p.teamName===g.homeName?'HOME':p.teamName===g.awayName?'AWAY':'',depthRank:p.depthRank??null,depthPosition:p.depthPosition||p.position,depthSource:p.depthSource||null,markets:[]};group.players.set(pk,player)}if(player.depthRank==null&&p.depthRank!=null)player.depthRank=p.depthRank;if(!player.depthPosition&&p.depthPosition)player.depthPosition=p.depthPosition;if(!player.depthSource&&p.depthSource)player.depthSource=p.depthSource
   player.markets.push(p);
  }
  const order=['QB','RB','WR','TE'];
  const groups=[...byGame.values()].map(group=>{
-  const players=[...group.players.values()].map(p=>{const pos=propPos(p.position);return {...p,pos,depthScore:propDepthScore(p,p.markets)}}).filter(p=>p.pos!=='OTHER');
+  const players=[...group.players.values()].map(p=>{const pos=propPos(p.position);return {...p,pos}}).filter(p=>p.pos!=='OTHER');
   const sections=new Map();
   for(const p of players){const arr=sections.get(p.pos)||[];arr.push(p);sections.set(p.pos,arr)}
-  for(const arr of sections.values()){arr.sort((a,b)=>b.depthScore-a.depthScore);arr.forEach((p,i)=>{p.depthRank=i+1;p.role=p.pos+(i+1);p.roleText=i===0?'STARTER':i===1?'ROTATION':'DEPTH'})}
+  for(const arr of sections.values()){arr.sort((a,b)=>{const ar=Number(a.depthRank),br=Number(b.depthRank),av=Number.isInteger(ar)&&ar>0,bv=Number.isInteger(br)&&br>0;if(av!==bv)return av?-1:1;if(av&&bv&&ar!==br)return ar-br;return String(a.name||'').localeCompare(String(b.name||''))});arr.forEach(p=>{const n=Number(p.depthRank),valid=Number.isInteger(n)&&n>0;const label=String(p.depthPosition||p.position||p.pos).toUpperCase();p.role=valid?label+n:'UNRANKED';p.roleText=valid?(p.depthSource==='overall-fallback'?(n===1?'EST. STARTER':n===2?'EST. ROTATION':'EST. DEPTH'):(n===1?'STARTER':n===2?'ROTATION':'DEPTH')):'DEPTH CHART UNAVAILABLE'})}
   return {...group,sections};
  }).filter(g=>g.sections.size);
  if(!groups.length)return '<div class="card"><div class="section-title">Player Props</div><div class="muted">No player props are available for '+esc(selectedWeek?'Week '+selectedWeek:'this week')+'.</div></div><div class="empty">Try another week or phase.</div>';

@@ -11,5 +11,7 @@ contextBridge.exposeInMainWorld("maddenAPI", {
   closeWindow: () => ipcRenderer.send("window-close"),
   startMobile: () => ipcRenderer.invoke("mobile-start"),
   stopMobile: () => ipcRenderer.invoke("mobile-stop"),
-  mobileStatus: () => ipcRenderer.invoke("mobile-status")
+  mobileStatus: () => ipcRenderer.invoke("mobile-status"),
+  checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
+  openExternal: (url) => ipcRenderer.invoke("open-external", url)
 });

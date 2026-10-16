@@ -1,5 +1,5 @@
 #define MyAppName "Madden 27 Sportsbook"
-#define MyAppVersion "1.8.06"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Madden 27 Sportsbook"
 #define MyAppExeName "Madden27-Sportsbook.exe"
 
@@ -14,7 +14,7 @@ DisableDirPage=no
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=no
 OutputDir=..\..\out\installer
-OutputBaseFilename=Madden27-Sportsbook-1.8.06-Setup
+OutputBaseFilename=Madden27-Sportsbook-1.1.0-Setup
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64compatible

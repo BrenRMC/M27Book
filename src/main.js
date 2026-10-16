@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs/promises";
@@ -100,7 +100,6 @@ function renderSlipBar(){const n=(state?.slip||[]).length;if(!n)return '';return
 
 function propPos(position){const p=String(position||'').toUpperCase();if(p==='HB'||p==='FB'||p==='RB')return 'RB';if(p==='WR')return 'WR';if(p==='TE')return 'TE';if(p==='QB')return 'QB';return 'OTHER'}
 function propPosLabel(k){return k==='QB'?'QUARTERBACKS':k==='RB'?'RUNNING BACKS':k==='WR'?'WIDE RECEIVERS':k==='TE'?'TIGHT ENDS':'OTHER'}
-function propDepthScore(p,markets){const pos=propPos(p.position);const pick=(...stats)=>{for(const stat of stats){const m=markets.find(x=>x.stat===stat);if(m)return Number(m.average??m.line??0)||0}return 0};if(pos==='QB')return pick('passYds','completions');if(pos==='RB')return pick('rushAtt','rushYds','receptions','recYds');return pick('recYds','receptions')}
 function renderMobilePropMarket(m){const over=m.overOdds||-110,under=m.underOdds||-110;const base={gameId:m.gameId,gameIndex:m.gameIndex,week:m.week,phaseWeek:m.phaseWeek,away:m.away,home:m.home,line:m.line,playerId:m.playerId,propStat:m.stat};return '<div class="prop-mobile-market"><div class="prop-mobile-market-title">'+esc(m.label||m.stat)+' <span>AVG '+esc(m.average)+'</span></div>'+btnAdd({...base,label:m.name+' O '+m.line+' '+m.label,display:'O '+m.line+' '+over,odds:over,kind:'propOver',meta:'Over • '+m.label})+btnAdd({...base,label:m.name+' U '+m.line+' '+m.label,display:'U '+m.line+' '+under,odds:under,kind:'propUnder',meta:'Under • '+m.label})+'</div>'}
 function renderMobilePropPlayer(p,pos){const markets=p.markets.slice().sort((a,b)=>{const order={passYds:1,passTD:2,completions:3,rushYds:4,rushAtt:5,recYds:6,receptions:7};return (order[a.stat]||99)-(order[b.stat]||99)});return '<article class="prop-player-mobile"><div class="prop-player-mobile-head"><div class="prop-player-identity">'+logo(p.team,true)+'<div><div class="prop-player-mobile-name">'+esc(p.name)+' <span class="prop-role">'+esc(p.role)+'</span></div><div class="prop-player-mobile-info">'+esc(p.team)+' • '+esc(p.roleText)+' • '+esc(markets[0]?.games||0)+' game sample</div></div></div><span class="tag">'+esc(p.side||pos)+'</span></div><div class="prop-mobile-markets">'+markets.map(renderMobilePropMarket).join('')+'</div></article>'}
 function propViewControls(){
@@ -114,7 +113,6 @@ function propViewControls(){
 }
 function propPos(position){const p=String(position||'').toUpperCase();if(p==='HB'||p==='FB'||p==='RB')return 'RB';if(p==='WR')return 'WR';if(p==='TE')return 'TE';if(p==='QB')return 'QB';return 'OTHER'}
 function propPosLabel(k){return k==='QB'?'QUARTERBACKS':k==='RB'?'RUNNING BACKS':k==='WR'?'WIDE RECEIVERS':k==='TE'?'TIGHT ENDS':'OTHER'}
-function propDepthScore(p,markets){const pos=propPos(p.position);const pick=(...stats)=>{for(const stat of stats){const m=markets.find(x=>x.stat===stat);if(m)return Number(m.average??m.line??0)||0}return 0};if(pos==='QB')return pick('passYds','completions');if(pos==='RB')return pick('rushAtt','rushYds','receptions','recYds');return pick('recYds','receptions')}
 function renderMobilePropMarket(m){const over=m.overOdds||-110,under=m.underOdds||-110;const base={gameId:m.gameId,gameIndex:m.gameIndex,week:m.week,phaseWeek:m.phaseWeek,phase:m.phase,away:m.away,home:m.home,line:m.line,playerId:m.playerId,propStat:m.stat};return '<div class="prop-mobile-market"><div class="prop-mobile-market-title">'+esc(m.label||m.stat)+' <span>AVG '+esc(m.average)+'</span></div>'+btnAdd({...base,label:m.name+' O '+m.line+' '+m.label,display:'O '+m.line+' '+over,odds:over,kind:'propOver',meta:'Over • '+m.label})+btnAdd({...base,label:m.name+' U '+m.line+' '+m.label,display:'U '+m.line+' '+under,odds:under,kind:'propUnder',meta:'Under • '+m.label})+'</div>'}
 function renderMobilePropPlayer(p,pos){const markets=p.markets.slice().sort((a,b)=>{const order={passYds:1,passTD:2,completions:3,rushYds:4,rushAtt:5,recYds:6,receptions:7};return (order[a.stat]||99)-(order[b.stat]||99)});return '<article class="prop-player-mobile"><div class="prop-player-mobile-head"><div class="prop-player-identity">'+logo(p.team,true)+'<div><div class="prop-player-mobile-name">'+esc(p.name)+' <span class="prop-role">'+esc(p.role)+'</span></div><div class="prop-player-mobile-info">'+esc(p.team)+' • '+esc(p.roleText)+' • '+esc(markets[0]?.games||0)+' game sample</div></div></div><span class="tag">'+esc(p.side||pos)+'</span></div><div class="prop-mobile-markets">'+markets.map(renderMobilePropMarket).join('')+'</div></article>'}
 function renderProps(){
@@ -132,20 +130,20 @@ function renderProps(){
   if(!group){group={g,players:new Map()};byGame.set(String(g.index),group)}
   const pk=String(p.playerId);
   let player=group.players.get(pk);
-  if(!player){player={playerId:p.playerId,name:p.name,position:p.position,team:p.teamName||'',side:p.teamName===g.homeName?'HOME':p.teamName===g.awayName?'AWAY':'',markets:[]};group.players.set(pk,player)}
+  if(!player){player={playerId:p.playerId,name:p.name,position:p.position,team:p.teamName||'',side:p.teamName===g.homeName?'HOME':p.teamName===g.awayName?'AWAY':'',depthRank:p.depthRank??null,depthPosition:p.depthPosition||p.position,markets:[]};group.players.set(pk,player)}if(player.depthRank==null&&p.depthRank!=null)player.depthRank=p.depthRank;if(!player.depthPosition&&p.depthPosition)player.depthPosition=p.depthPosition
   player.markets.push(p);
  }
  const order=['QB','RB','WR','TE'];
  const groups=[...byGame.values()].map(group=>{
-  const players=[...group.players.values()].map(p=>{const pos=propPos(p.position);return {...p,pos,depthScore:propDepthScore(p,p.markets)}}).filter(p=>p.pos!=='OTHER');
+  const players=[...group.players.values()].map(p=>{const pos=propPos(p.position);return {...p,pos}}).filter(p=>p.pos!=='OTHER');
   // Match the desktop sportsbook: depth is ranked independently by TEAM + POSITION.
   // The away team's QB list must never change the home team's QB1/QB2/QB3 labels.
   const depthGroups=new Map();
   for(const p of players){const teamKey=String(p.team||p.side||'').trim().toUpperCase();const key=teamKey+'|'+p.pos;const arr=depthGroups.get(key)||[];arr.push(p);depthGroups.set(key,arr)}
-  for(const arr of depthGroups.values()){arr.sort((a,b)=>b.depthScore-a.depthScore);arr.forEach((p,i)=>{p.depthRank=i+1;p.role=p.pos+(i+1);p.roleText=i===0?'STARTER':i===1?'ROTATION':'DEPTH'})}
+  for(const arr of depthGroups.values()){arr.sort((a,b)=>{const ar=Number(a.depthRank),br=Number(b.depthRank),av=Number.isInteger(ar)&&ar>0,bv=Number.isInteger(br)&&br>0;if(av!==bv)return av?-1:1;if(av&&bv&&ar!==br)return ar-br;return String(a.name||'').localeCompare(String(b.name||''))});arr.forEach(p=>{const n=Number(p.depthRank),valid=Number.isInteger(n)&&n>0;const label=String(p.depthPosition||p.position||p.pos).toUpperCase();p.role=valid?label+n:'UNRANKED';p.roleText=valid?(n===1?'STARTER':n===2?'ROTATION':'DEPTH'):'DEPTH CHART UNAVAILABLE'})}
   const sections=new Map();
   for(const p of players){const arr=sections.get(p.pos)||[];arr.push(p);sections.set(p.pos,arr)}
-  for(const arr of sections.values()){arr.sort((a,b)=>a.depthRank-b.depthRank)}
+  for(const arr of sections.values()){arr.sort((a,b)=>{const ar=Number(a.depthRank),br=Number(b.depthRank),av=Number.isInteger(ar)&&ar>0,bv=Number.isInteger(br)&&br>0;if(av!==bv)return av?-1:1;if(av&&bv&&ar!==br)return ar-br;return String(a.name||'').localeCompare(String(b.name||''))})}
   return {...group,sections};
  }).filter(g=>g.sections.size);
  if(!groups.length){return controls+'<div class="card"><div class="empty">No player props are available for '+esc(phaseNamesForMobile(selectedPhase)+' Week '+selectedWeek)+'.</div><div class="muted" style="text-align:center">Choose another week or phase, or make sure the selected week has upcoming games.</div></div>'+renderSlipBar()}
@@ -293,6 +291,23 @@ ipcMain.on("window-close", () => { if (mainWindow && !mainWindow.isDestroyed()) 
 ipcMain.handle("mobile-start", () => startMobileServer());
 ipcMain.handle("mobile-stop", () => stopMobileServer());
 ipcMain.handle("mobile-status", () => mobileConnectionInfo());
+
+const GITHUB_OWNER = "BrenRMC";
+const GITHUB_REPO = "M27Book";
+function normalizeVersion(value) { return String(value || "").trim().replace(/^v/i, "").split("-")[0].split(".").map(n => Number.parseInt(n, 10) || 0); }
+function versionIsNewer(candidate, current) { const a=normalizeVersion(candidate), b=normalizeVersion(current); for(let i=0;i<Math.max(a.length,b.length);i++){const x=a[i]||0,y=b[i]||0;if(x!==y)return x>y;} return false; }
+ipcMain.handle("check-for-updates", async () => {
+  try {
+    const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`, { headers: { "Accept": "application/vnd.github+json", "User-Agent": "M27Book-Updater" }, signal: AbortSignal.timeout(12000) });
+    if (response.status === 404) return { ok: true, updateAvailable: false, currentVersion: app.getVersion(), latestVersion: null, message: "No published stable GitHub release was found yet." };
+    if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}`);
+    const release = await response.json();
+    const latestVersion = String(release.tag_name || "");
+    if (!latestVersion) throw new Error("The latest release has no version tag.");
+    return { ok: true, currentVersion: app.getVersion(), latestVersion, updateAvailable: versionIsNewer(latestVersion, app.getVersion()), releaseUrl: release.html_url || `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases` , releaseNotes: String(release.body || "").slice(0, 5000), assets: (release.assets || []).map(a => ({ name:a.name, url:a.browser_download_url, size:a.size })) };
+  } catch (error) { return { ok: false, currentVersion: app.getVersion(), error: error?.message || "Update check failed" }; }
+});
+ipcMain.handle("open-external", async (_event, url) => { const parsed = new URL(String(url || "")); if (parsed.protocol !== "https:" || parsed.hostname !== "github.com") throw new Error("Only GitHub HTTPS links can be opened."); await shell.openExternal(parsed.toString()); return true; });
 
 app.whenReady().then(createWindow);
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
@@ -459,33 +474,49 @@ async function parseFranchise(filePath) {
 
     const teams = new Map();
     const teamTableNames = ["Team","FranchiseTeam","TeamData"];
+    const teamTableCandidates = [];
     for (const tableName of teamTableNames) {
       try {
         const tables = franchise.getAllTablesByName(tableName);
         for (const table of tables || []) {
-          // Try common fields; unresolved fields simply remain empty.
-          try { await table.readRecords(["TeamName","DisplayName","LongName","ShortName","TeamAbbreviation","Abbreviation","CityName","NickName","TeamNickName","Name","TeamIndex"]); } catch {}
+          // There can be several tables with the same schema name. Read every
+          // candidate before choosing one; getTableByName() alone is unsafe.
+          try { await table.readRecords(["TeamName","DisplayName","LongName","ShortName","TeamAbbreviation","Abbreviation","CityName","NickName","TeamNickName","Name","TeamIndex","DepthChart"]); } catch {}
+          const rows = (table.records || []).filter(r => r && !r.isEmpty);
+          let namedRows = 0, chartRefs = 0;
+          for (const rec of rows) {
+            if (teamInfoFromRecord(rec)) namedRows++;
+            try { if (rec.getReferenceDataByKey('DepthChart')) chartRefs++; } catch {}
+          }
+          // Prefer the table that actually owns the franchise's team roster and
+          // depth-chart links, not a one-row metadata table with the same name.
+          const score = rows.length * 1000 + chartRefs * 10000 + namedRows * 10 + (tableName === 'Team' ? 1 : 0);
+          teamTableCandidates.push({ table, tableName, score, rowCount: rows.length, namedRows, chartRefs });
         }
       } catch {}
     }
+    teamTableCandidates.sort((a,b) => b.score - a.score);
+    const canonicalTeamTable = teamTableCandidates[0]?.table || null;
+    const orderedTeamTables = [canonicalTeamTable, ...teamTableCandidates.map(x => x.table).filter(t => t && t !== canonicalTeamTable)];
 
     // Madden Player.TeamIndex is a plain integer roster assignment. It is not
     // necessarily the Player/Team table row position, which matters for fantasy
     // drafts and relocated franchises.
     const teamIndexMap = new Map();
-    for (const tableName of teamTableNames) {
+    for (const table of orderedTeamTables) {
+      if (!table) continue;
       try {
-        for (const table of franchise.getAllTablesByName(tableName) || []) {
-          for (const rec of table.records || []) {
-            if (!rec || rec.isEmpty) continue;
-            const n = Number(getValue(rec, "TeamIndex"));
-            const info = teamInfoFromRecord(rec);
-            if (!info || !Number.isInteger(n) || n < 0) continue;
-            const existing = teamIndexMap.get(String(n));
-            const existingPractice = String(existing?.name || "").trim().toLowerCase() === "practice";
-            const thisPractice = String(info.name || "").trim().toLowerCase() === "practice";
-            if (!existing || (existingPractice && !thisPractice)) teamIndexMap.set(String(n), info);
-          }
+        for (const rec of table.records || []) {
+          if (!rec || rec.isEmpty) continue;
+          const n = Number(getValue(rec, "TeamIndex"));
+          const info = teamInfoFromRecord(rec);
+          if (!info || !Number.isInteger(n) || n < 0) continue;
+          const existing = teamIndexMap.get(String(n));
+          const existingPractice = String(existing?.name || "").trim().toLowerCase() === "practice";
+          const thisPractice = String(info.name || "").trim().toLowerCase() === "practice";
+          // Since orderedTeamTables starts with the selected canonical table,
+          // never let a duplicate-name metadata table overwrite its mapping.
+          if (!existing || (existingPractice && !thisPractice)) teamIndexMap.set(String(n), info);
         }
       } catch {}
     }
@@ -531,19 +562,15 @@ async function parseFranchise(filePath) {
     // Prefer the actual Team table and index it by RECORD INDEX. Do not use the
     // TeamIndex field here; TeamIndex is a separate roster-assignment value.
     const teamRecordMap = new Map();
-    for (const tableName of teamTableNames) {
+    for (const table of orderedTeamTables) {
+      if (!table) continue;
       try {
-        for (const table of franchise.getAllTablesByName(tableName) || []) {
-          for (const rec of table.records || []) {
-            if (!rec || rec.isEmpty || !Number.isInteger(Number(rec.index))) continue;
-            const info = teamInfoFromRecord(rec);
-            if (!info) continue;
-            const key = String(rec.index);
-            // The canonical Team table wins over fallback team-like tables.
-            if (!teamRecordMap.has(key) || tableName === 'Team') {
-              teamRecordMap.set(key, info);
-            }
-          }
+        for (const rec of table.records || []) {
+          if (!rec || rec.isEmpty || !Number.isInteger(Number(rec.index))) continue;
+          const info = teamInfoFromRecord(rec);
+          if (!info) continue;
+          const key = String(rec.index);
+          if (!teamRecordMap.has(key)) teamRecordMap.set(key, info);
         }
       } catch {}
     }
@@ -801,9 +828,129 @@ async function parseFranchise(filePath) {
             } catch {}
           }
         }
+        info.depthRanks = {};
+        info.depthRank = null;
+        info.depthPosition = null;
         playerMap.set(String(rec.index), info);
       }
     }
+
+    // Madden 27's authoritative depth chart is a reference chain:
+    // Team.DepthChart -> DepthChart position slot -> Player[] row -> Player refs.
+    // Do not infer this order from averages, market lines, or OverallRating.
+    const depthChartDiagnostics = { teamChartsRead: 0, slotArraysRead: 0, rankedPlayers: 0, errors: [], playerTable: null, teamTable: null, teamSamples: [], chartSamples: [], slotSamples: [], refSamples: [] };
+    const directDepthSlots = new Set(['QB','HB','FB','WR','TE','LT','LG','C','RG','RT','LE','RE','DT','LOLB','MLB','ROLB','CB','FS','SS','K','P','KR','PR','LS']);
+    const tableIdFor = table => Number(table?.header?.tableId ?? table?.header?.id ?? -1);
+    const referenceParts = ref => {
+      const tableId = Number(ref?.tableId ?? ref?.tableID ?? ref?.table);
+      const rowNumber = Number(ref?.rowNumber ?? ref?.rowNum ?? ref?.rowIndex ?? ref?.recordIndex);
+      return Number.isInteger(tableId) && Number.isInteger(rowNumber) && rowNumber >= 0 ? { tableId, rowNumber } : null;
+    };
+    const readTableCache = new Map();
+    async function ensureTableRead(table) {
+      if (!table) return;
+      if (!readTableCache.has(table)) readTableCache.set(table, Promise.resolve().then(() => table.readRecords()));
+      await readTableCache.get(table);
+    }
+    function directDepthSlot(fieldName) {
+      const normalized = String(fieldName || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (directDepthSlots.has(normalized)) return normalized;
+      const stripped = normalized.replace(/^DEPTHCHART/, '').replace(/^DEPTH/, '').replace(/(?:DEPTHCHART|DEPTH|ARRAY|ENTRIES?)$/, '');
+      if (directDepthSlots.has(stripped)) return stripped;
+      const tokens = String(fieldName || '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+      const found = tokens.find(token => directDepthSlots.has(token));
+      if (found) return found;
+      return [...directDepthSlots].find(slot => normalized === `DEPTHCHART${slot}` || normalized === `${slot}DEPTHCHART`) || null;
+    }
+    const playerTableId = tableIdFor(playerTable);
+    depthChartDiagnostics.playerTable = { name: playerTable?.name || null, tableId: playerTableId, recordCount: playerTable?.records?.length ?? null };
+    try {
+      const teamTable = canonicalTeamTable;
+      depthChartDiagnostics.teamTable = { name: teamTable?.name || null, tableId: tableIdFor(teamTable), recordCount: teamTable?.records?.length ?? null, candidates: teamTableCandidates.map(x => ({name:x.table?.name || x.tableName, tableId:tableIdFor(x.table), rowCount:x.rowCount, namedRows:x.namedRows, chartRefs:x.chartRefs, score:x.score})) };
+      await ensureTableRead(teamTable);
+      const seenDepthSlots = new Set();
+      for (const teamRec of teamTable?.records || []) {
+        if (!teamRec || teamRec.isEmpty) continue;
+        let chartRef = null;
+        try { chartRef = teamRec.getReferenceDataByKey('DepthChart'); } catch {}
+        if (depthChartDiagnostics.teamSamples.length < 12) depthChartDiagnostics.teamSamples.push({ index: teamRec.index, name: getRecordFieldKeys(teamRec).filter(k => /name|team|abbr|display/i.test(k)).slice(0,12).reduce((o,k) => (o[k] = getValue(teamRec,k), o), {}), fields: getRecordFieldKeys(teamRec).filter(k => /depth|teamname|displayname|nickname/i.test(k)).slice(0,24), chartRef: chartRef ? { keys: Object.keys(chartRef), values: Object.fromEntries(Object.entries(chartRef).filter(([k,v]) => ['number','string','boolean'].includes(typeof v)).slice(0,16)) } : null });
+        const chartParts = referenceParts(chartRef);
+        if (!chartParts) continue;
+        const chartTable = franchise.getTableById(chartParts.tableId);
+        if (!chartTable || String(chartTable.name || '') !== 'DepthChart') continue;
+        await ensureTableRead(chartTable);
+        const chartRec = chartTable.records?.[chartParts.rowNumber];
+        if (!chartRec || chartRec.isEmpty) continue;
+        if (depthChartDiagnostics.chartSamples.length < 12) depthChartDiagnostics.chartSamples.push({ teamIndex: teamRec.index, chartTable: chartTable.name, chartTableId: tableIdFor(chartTable), row: chartParts.rowNumber, fields: getRecordFieldKeys(chartRec).slice(0,100), refs: getRecordFieldKeys(chartRec).slice(0,100).map(key => { let r=null; try { r=chartRec.getReferenceDataByKey(key); } catch {} return { key, value: getValue(chartRec,key), ref: r ? { keys:Object.keys(r), values:Object.fromEntries(Object.entries(r).filter(([k,v]) => ['number','string','boolean'].includes(typeof v)).slice(0,12)) } : null }; }).filter(x=>x.ref || /depth|qb|hb|wr|te|slot|array/i.test(x.key)).slice(0,50) });
+        depthChartDiagnostics.teamChartsRead++;
+        const teamKey = String(teamRec.index);
+        for (const fieldName of getRecordFieldKeys(chartRec)) {
+          const slotPosition = directDepthSlot(fieldName);
+          if (!slotPosition) continue;
+          let slotRef = null;
+          try { slotRef = chartRec.getReferenceDataByKey(fieldName); } catch {}
+          const slotParts = referenceParts(slotRef);
+          if (!slotParts) continue;
+          const arrayTable = franchise.getTableById(slotParts.tableId);
+          if (!arrayTable || !(arrayTable.isArray || String(arrayTable.name || '').endsWith('[]'))) continue;
+          if (!String(arrayTable.name || '').startsWith('Player[]')) continue;
+          await ensureTableRead(arrayTable);
+          const arrayRec = arrayTable.records?.[slotParts.rowNumber];
+          if (!arrayRec || arrayRec.isEmpty) continue;
+          if (depthChartDiagnostics.slotSamples.length < 30) depthChartDiagnostics.slotSamples.push({ teamIndex: teamRec.index, slot: slotPosition, field: fieldName, table: arrayTable.name, tableId: tableIdFor(arrayTable), row: slotParts.rowNumber, arraySize: arrayRec.arraySize ?? arrayTable.arraySizes?.[slotParts.rowNumber] ?? null, fields: (arrayRec.fieldsArray || []).slice(0,20).map(f => ({key:f.key, value:getValue(arrayRec,f.key)})), firstRef: (()=>{const f=(arrayRec.fieldsArray||[])[0];if(!f)return null;let r=null;try{r=arrayRec.getReferenceDataByKey(f.key)}catch{}return r?{keys:Object.keys(r),values:Object.fromEntries(Object.entries(r).filter(([k,v])=>['number','string','boolean'].includes(typeof v)).slice(0,12))}:null})() });
+          depthChartDiagnostics.slotArraysRead++;
+          const slotSeenKey = `${teamKey}:${slotPosition}`;
+          if (seenDepthSlots.has(slotSeenKey)) continue;
+          seenDepthSlots.add(slotSeenKey);
+          let slotRank = 0;
+          const fields = arrayRec.fieldsArray || [];
+          const arraySize = Number(arrayRec.arraySize ?? arrayTable.arraySizes?.[slotParts.rowNumber] ?? fields.length);
+          for (let i = 0; i < fields.length && i < (arraySize > 0 ? arraySize : fields.length); i++) {
+            const itemField = fields[i];
+            let playerRef = null;
+            try { playerRef = arrayRec.getReferenceDataByKey(itemField.key); } catch {}
+            const playerParts = referenceParts(playerRef);
+            if (!playerParts || (playerTableId >= 0 && playerParts.tableId !== playerTableId)) continue;
+            const player = playerMap.get(String(playerParts.rowNumber));
+            if (!player) { if (depthChartDiagnostics.refSamples.length < 30) depthChartDiagnostics.refSamples.push({ slot: slotPosition, playerRef: playerParts, expectedPlayerTableId: playerTableId, reason: 'player-row-not-in-map' }); continue; }
+            if (depthChartDiagnostics.refSamples.length < 30) depthChartDiagnostics.refSamples.push({ slot: slotPosition, playerRef: playerParts, expectedPlayerTableId: playerTableId, resolved: { name: player.name, position: player.position, teamId: player.teamId, teamName: player.teamName }, reason: player.teamId !== teamKey ? 'team-id-mismatch' : (String(player.position || '').toUpperCase() !== slotPosition && !(String(player.position || '').toUpperCase()==='RB' && slotPosition==='HB') ? 'position-mismatch' : 'matched') });
+            slotRank++;
+            const playerPosition = String(player.position || '').toUpperCase() === 'RB' ? 'HB' : String(player.position || '').toUpperCase();
+            if (player.teamId !== teamKey || playerPosition !== slotPosition) continue;
+            player.depthRanks[slotPosition] = slotRank;
+            if (player.depthRank == null || !Number.isFinite(Number(player.depthRank)) || slotRank < Number(player.depthRank)) {
+              player.depthRank = slotRank;
+              player.depthPosition = slotPosition;
+            }
+          }
+        }
+      }
+      const rankedDepthPlayers = [...playerMap.values()].filter(player => Number.isInteger(Number(player.depthRank)) && Number(player.depthRank) > 0);
+      depthChartDiagnostics.rankedPlayers = rankedDepthPlayers.length;
+      depthChartDiagnostics.rankedSample = rankedDepthPlayers.slice(0, 40).map(player => ({ name: player.name, position: player.position, team: player.teamName, teamId: player.teamId, slot: player.depthPosition, rank: player.depthRank }));
+      depthChartDiagnostics.playerSamples = [...playerMap.values()].slice(0, 30).map(player => ({ name: player.name, position: player.position, team: player.teamName, teamId: player.teamId, playerId: player.id }));
+    } catch (depthError) {
+      depthChartDiagnostics.errors.push(String(depthError?.message || depthError));
+    }
+    // Only use authoritative Madden depth-chart membership for prop eligibility.
+    // OVR-based fallback ranks made free agents, stale records, and players in
+    // the wrong primary-position group appear as legitimate depth-chart players.
+    let estimatedDepthPlayers = 0;
+    function primaryDepthSlot(player) {
+      const pos = String(player?.position || '').toUpperCase();
+      const slot = pos === 'RB' ? 'HB' : pos;
+      const rank = Number(player?.depthRanks?.[slot]);
+      return Number.isInteger(rank) && rank > 0 ? { slot, rank } : null;
+    }
+    for (const player of playerMap.values()) {
+      const actual = primaryDepthSlot(player);
+      player.depthRank = actual?.rank ?? null;
+      player.depthPosition = actual?.slot ?? null;
+      player.depthSource = actual ? 'madden-depth-chart' : null;
+    }
+    depthChartDiagnostics.estimatedDepthPlayers = estimatedDepthPlayers;
+    depthChartDiagnostics.rankingMode = 'authoritative-depth-chart-only';
+    depthChartDiagnostics.playersWithoutAuthoritativeDepth = [...playerMap.values()].filter(player => !primaryDepthSlot(player)).length;
 
     const teamIndexZeroSchedule = resolvedGames.filter(g =>
       decodeScheduleRecordIndex(g.AwayTeam) === 0 || decodeScheduleRecordIndex(g.HomeTeam) === 0
@@ -1307,20 +1454,20 @@ async function parseFranchise(filePath) {
 
     const propTotals=new Map();
     for(const r of playerGameStats) {
-      const p=playerMap.get(String(r.playerId)); if(!p) continue;
-      const t=propTotals.get(r.playerId)||{playerId:r.playerId,name:p.name,position:p.position,teamId:p.teamId,teamIndex:p.teamIndex??null,teamName:p.teamName||null,teamAbbreviation:p.teamAbbreviation||null,games:new Set(),sum:{}};
+      const p=playerMap.get(String(r.playerId)); if(!p || !primaryDepthSlot(p)) continue;
+      const t=propTotals.get(r.playerId)||{playerId:r.playerId,name:p.name,position:p.position,teamId:p.teamId,teamIndex:p.teamIndex??null,teamName:p.teamName||null,teamAbbreviation:p.teamAbbreviation||null,depthRank:p.depthRank??null,depthPosition:p.depthPosition??null,depthSource:p.depthSource??null,games:new Set(),sum:{}};
       t.games.add(r.gameIndex);
-      if(r.teamIndex!==null){t.teamIndex=r.teamIndex;}
-      if(r.teamName){t.teamName=r.teamName;t.teamAbbreviation=r.teamAbbreviation||t.teamAbbreviation;}
       for(const [k,v] of Object.entries(r.stats)) t.sum[k]=(t.sum[k]||0)+Number(v);
       propTotals.set(r.playerId,t);
     }
     const playerProps=[];
     const historicalPropPlayerIds=new Set();
     for(const t of propTotals.values()) {
+      const currentPlayer=playerMap.get(String(t.playerId));
+      if(!currentPlayer || !primaryDepthSlot(currentPlayer)) continue;
       const gp=t.games.size; if(!gp) continue; const s=t.sum;
       const before=playerProps.length;
-      const push=(stat,label,kind,eligible)=>{ if(!eligible || !Number.isFinite(s[stat])) return; const avg=s[stat]/gp; const line=Math.max(0,Math.round(avg*2)/2); if(line<=0) return; playerProps.push({playerId:t.playerId,name:t.name,position:t.position,teamId:t.teamId,teamIndex:t.teamIndex,teamName:t.teamName,teamAbbreviation:t.teamAbbreviation,stat,label,kind,line,games:gp,average:Number(avg.toFixed(2)),source:'historical'}); };
+      const push=(stat,label,kind,eligible)=>{ if(!eligible || !Number.isFinite(s[stat])) return; const avg=s[stat]/gp; const line=Math.max(0,Math.round(avg*2)/2); if(line<=0) return; playerProps.push({playerId:t.playerId,name:t.name,position:t.position,teamId:t.teamId,teamIndex:t.teamIndex,teamName:t.teamName,teamAbbreviation:t.teamAbbreviation,depthRank:t.depthRank,depthPosition:t.depthPosition,depthSource:t.depthSource??null,stat,label,kind,line,games:gp,average:Number(avg.toFixed(2)),source:'historical'}); };
       push("passYds","Passing Yards","passYds",(s.attempts||0)>=10); push("passTD","Passing TDs","passTD",(s.attempts||0)>=10); push("completions","Completions","completions",(s.attempts||0)>=10);
       push("rushYds","Rushing Yards","rushYds",(s.rushAtt||0)>=5); push("rushAtt","Rushing Attempts","rushAtt",(s.rushAtt||0)>=5); push("recYds","Receiving Yards","recYds",(s.receptions||0)>=5); push("receptions","Receptions","receptions",(s.receptions||0)>=5);
       if(playerProps.length>before) historicalPropPlayerIds.add(String(t.playerId));
@@ -1357,14 +1504,16 @@ async function parseFranchise(filePath) {
       for(const rec of playerTable?.records||[]){
         if(!rec || rec.isEmpty) continue;
         const p=playerMap.get(String(rec.index)); if(!p || p.teamIndex===null || p.teamIndex===undefined || !p.position) continue;
+        const actualDepth=primaryDepthSlot(p); if(!actualDepth) continue;
         if(historicalPropPlayerIds.has(String(p.id))) continue;
-        if(!['QB','HB','FB','WR','TE'].includes(String(p.position).toUpperCase())) continue;
+        const primaryPosition=String(p.position).toUpperCase()==='RB'?'HB':String(p.position).toUpperCase();
+        if(!['QB','HB','FB','WR','TE'].includes(primaryPosition) || actualDepth.slot!==primaryPosition) continue;
         const ovr=ratingFor(rec);
         const key=String(p.teamIndex);
         const arr=groups.get(key)||[]; arr.push({...p,ovr}); groups.set(key,arr);
       }
       for(const arr of groups.values()){
-        arr.sort((a,b)=>b.ovr-a.ovr);
+        arr.sort((a,b)=>(Number(a.depthRank)||999)-(Number(b.depthRank)||999) || String(a.name||'').localeCompare(String(b.name||'')));
         const used=new Set();
         const positionCounts=new Map();
         for(const p of arr){
@@ -1390,7 +1539,7 @@ async function parseFranchise(filePath) {
             markets=[['recYds','Receiving Yards','recYds',recYds],['receptions','Receptions','receptions',receptions]];
           }
           for(const [stat,label,kind,line] of markets){
-            playerProps.push({playerId:p.id,name:p.name,position:p.position,teamId:p.teamId,teamIndex:p.teamIndex,teamName:p.teamName,teamAbbreviation:p.teamAbbreviation,stat,label,kind,line,games:0,average:null,source:'rosterProjection'});
+            playerProps.push({playerId:p.id,name:p.name,position:p.position,teamId:p.teamId,teamIndex:p.teamIndex,teamName:p.teamName,teamAbbreviation:p.teamAbbreviation,depthRank:p.depthRank??null,depthPosition:p.depthPosition??null,depthSource:p.depthSource??null,stat,label,kind,line,games:0,average:null,source:'rosterProjection'});
           }
           used.add(p.id);
           positionCounts.set(pos,count+1);
@@ -1409,8 +1558,8 @@ async function parseFranchise(filePath) {
     }
 
     const playersWithTeam = [...playerMap.values()].filter(p => p.teamIndex !== null).length;
-    return { ok:true, version:"1.7.65", fileName:path.basename(filePath), gameYear:franchise.gameYear, gameType:franchise.gameType,
-      summary:{seasonGameRecords:games.length, playableGames:regularSeasonGames.length, allPlayableGames:scheduleGames.length, preseasonGames:phaseCounts.preseason, phaseCounts, phaseWeeks, playerRecords:playerCount, playersWithTeam, weeksFound:weeks, gamesByWeek, activeSeasonWeek, activeDisplayWeek:activeSeasonWeek + 1, completedGameCount:statGameIndexes.size, playerGameStatRows:playerGameStats.length, playerPropMarkets:playerProps.length, playerPropSource:propSource, practiceGameCount:practiceGameIndexes.size, gameTimeField:detectedGameTimeField || (games.some(g => g.GameTimeSource === "TimeOfDay(raw)") ? "TimeOfDay(raw)" : null), gameTimeValuesFound:resolvedGames.filter(g => g.gameTimeMinutes !== null).length, teamIndexZeroSchedule, statMappings},
+    return { ok:true, version:"1.8.13", fileName:path.basename(filePath), gameYear:franchise.gameYear, gameType:franchise.gameType,
+      summary:{seasonGameRecords:games.length, playableGames:regularSeasonGames.length, allPlayableGames:scheduleGames.length, preseasonGames:phaseCounts.preseason, phaseCounts, phaseWeeks, playerRecords:playerCount, playersWithTeam, weeksFound:weeks, gamesByWeek, activeSeasonWeek, activeDisplayWeek:activeSeasonWeek + 1, completedGameCount:statGameIndexes.size, playerGameStatRows:playerGameStats.length, playerPropMarkets:playerProps.length, playerPropSource:propSource, depthChart:{...depthChartDiagnostics, unrankedPropPlayers:[...new Map(playerProps.map(p=>[String(p.playerId),p])).values()].filter(p=>!Number.isInteger(Number(p.depthRank))||Number(p.depthRank)<=0).length}, practiceGameCount:practiceGameIndexes.size, gameTimeField:detectedGameTimeField || (games.some(g => g.GameTimeSource === "TimeOfDay(raw)") ? "TimeOfDay(raw)" : null), gameTimeValuesFound:resolvedGames.filter(g => g.gameTimeMinutes !== null).length, teamIndexZeroSchedule, statMappings},
       games:scheduleGames, teams:teamList, playerSample, players:[...playerMap.values()], playerProps, playerGameStats,
       diagnostics:{allPlayableGames:scheduleGames.length, regularSeasonGames:regularSeasonGames.length, preseasonGames:phaseCounts.preseason, phaseCounts, phaseWeeks, ignoredEarlyAuxiliaryRows} };
   } catch (error) { return { ok:false, error:String(error?.stack || error) }; }
